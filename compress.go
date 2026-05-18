@@ -37,6 +37,8 @@ func (cw *compressResponseWriter) Write(b []byte) (int, error) {
 }
 
 func (cw *compressResponseWriter) ReadFrom(r io.Reader) (int64, error) {
+	cw.w.Header().Del("Content-Length")
+
 	return io.Copy(cw.compressor, r)
 }
 
