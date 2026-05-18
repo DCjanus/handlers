@@ -144,6 +144,41 @@ func TestCompressHandlerGzip(t *testing.T) {
 	}
 }
 
+type readerFromResponseRecorder struct {
+	*httptest.ResponseRecorder
+}
+
+func (w *readerFromResponseRecorder) ReadFrom(r io.Reader) (int64, error) {
+	return w.Body.ReadFrom(r)
+}
+
+type readerOnly struct {
+	io.Reader
+}
+
+func TestCompressHandlerGzipReadFromDropsContentLength(t *testing.T) {
+	body := bytes.Repeat([]byte("Gorilla!\n"), 1024)
+	w := &readerFromResponseRecorder{ResponseRecorder: httptest.NewRecorder()}
+
+	CompressHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+		w.Header().Set("Content-Type", contentType)
+		if _, err := io.Copy(w, readerOnly{Reader: bytes.NewReader(body)}); err != nil {
+			t.Fatal(err)
+		}
+	})).ServeHTTP(w, &http.Request{
+		Method: http.MethodGet,
+		Header: http.Header{
+			acceptEncoding: []string{"gzip"},
+		},
+	})
+
+	resp := w.Result()
+	if l := resp.Header.Get("Content-Length"); l != "" {
+		t.Errorf("wrong content-length. got %q expected %q", l, "")
+	}
+}
+
 func TestCompressHandlerDeflate(t *testing.T) {
 	w := httptest.NewRecorder()
 	compressedRequest(w, "deflate")
